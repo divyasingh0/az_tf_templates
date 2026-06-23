@@ -1,56 +1,83 @@
+# terraform {
+#   required_version = ">= 1.3.0"
 
-terraform {
-  required_version = ">= 1.3.0"
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.90"
+#   required_providers {
+#     azurerm = {
+#       source  = "hashicorp/azurerm"
+#       version = "~> 3.90"
+#     }
+#   }
+# }
+
+resource "azurerm_resource_group" "this" {
+  name     = var.resource_group_name
+  location = var.location
+}
+
+module "vnet" {
+  source = "git::https://github.com/divyasingh0/az_tf_module.git//demo_folder/virtual_network?ref=e2eab019bf884c922b50fd17dfc5e7c5f3f3adf0"
+
+
+  vnets = {
+    primary = {
+      vnet_rgname        = var.resource_group_name
+      vnet_location      = var.location
+      vnet_address_space = [var.vnet_address_space]
+      dns_servers        = var.dns_servers
+
+      resource_name_config = {
+        resource_type = "vnet"
+        application   = var.app_name
+        environment   = var.environment
+        region        = var.location
+        cloud         = "az"
+        instance      = "01"
+        use_hyphen    = true
+      }
+
+      mandatory_tags = var.mandatory_tags
+      optional_tags  = var.optional_tags
+      custom_tags    = var.custom_tags
+      resource_specific_tags = {}
     }
+  }
+subnets = {
+  pe = {
+    subnet_name                                   = "snet-pe"
+    subnet_address_prefixes                       = [var.pe_subnet_prefix]
+    subnet_rgname                                 = var.resource_group_name
+    vnet_key                                      = "primary"
+    private_endpoint_network_policies             = "Disabled"
+    private_link_service_network_policies_enabled = false
+    service_endpoints                             = []
+    subnet_delegation_name                        = ""
+    subnet_service_delegation_name                = null
+    subnet_service_delegation_actions             = null
   }
 }
 
-# ── 1. NAMING CONVENTION ──────────────────────────────────────────────────────
-# All names follow org standard: st<app><env><region_short>001
-# App teams never supply resource names directly.
+  depends_on = [azurerm_resource_group.this]
+}
 
-locals {
-  region_short = {
-    eastus        = "eus"
-    eastus2       = "eus2"
-    westus        = "wus"
-    westus2       = "wus2"
-    centralus     = "cus"
-    uksouth       = "uks"
-    ukwest        = "ukw"
-    westeurope    = "weu"
-    northeurope   = "neu"
-    southeastasia = "sea"
+module "storage_account" {
+  source = "git::https://github.com/divyasingh0/az_tf_module.git//demo_folder/storage?ref=e2eab019bf884c922b50fd17dfc5e7c5f3f3adf0"
+
+  resource_name_config = {
+    resource_type = "stg"
+    application   = var.app_name
+    environment   = var.environment
+    region        = var.location
+    cloud         = "az"
+    instance      = "01"
+    use_hyphen    = false
   }
 
-  region_code          = lookup(local.region_short, var.location, var.location)
-  storage_account_name = "st${var.app_name}${var.environment}${local.region_code}001"
-  resource_group_name  = "rg-${var.app_name}-${var.environment}-${local.region_code}-001"
+  mandatory_tags = var.mandatory_tags
 
-  # ── Platform-enforced governance tags ──────────────────────────────────────
-  # Mandatory tags are composed here. The app team cannot override these.
-  # Optional workload tags (var.workload_tags) are merged underneath so
-  # mandatory tags always win (mandatory_tags is the right-hand operand).
-  composed_tags = merge(
-    var.workload_tags,
-    {
-      managed-by  = "terraform"
-      environment = var.environment
-      workload    = var.app_name
-    }
-  )
-
-  # ── Storage account map — exact shape the brownfield module expects ─────────
-  # Security defaults are hardcoded here. TLS 1.2, no public access,
-  # no cross-tenant replication, SFTP off. App teams cannot weaken these.
   storage_accounts = {
-    (local.storage_account_name) = {
-      accntname                        = local.storage_account_name
-      rgname                           = local.resource_group_name
+    primary = {
+      rgname                           = var.resource_group_name
+      instance                         = "01"
       location                         = var.location
       account_tier                     = "Standard"
       account_replication_type         = var.account_replication_type
@@ -61,19 +88,24 @@ locals {
       container_retention_days         = tostring(var.container_retention_days)
       sftp_enabled                     = false
       cross_tenant_replication_enabled = false
-      sa_tags = {
-        App   = var.app_name
-        Notes = var.notes
-      }
-      # network_rules left null; network hardening is handled via
-      # private endpoints by the platform team separately.
+
       network_rules = null
       cors_rules    = var.cors_rules
+
+      resource_specific_tags = {
+        backup-policy = "daily"
+      }
+
+      optional_tags = var.optional_tags
+
+      custom_tags = merge(
+        var.custom_tags,
+        {
+          Notes = var.notes
+        }
+      )
     }
   }
-}
 
-module "storage_account" {
-  source = "https://github.com/divyasingh0/az_tf_module/tree/abc30744748253ed46ff69e1064f89f9306e7004/storage"
-  storage_accounts = local.storage_accounts
+  depends_on = [azurerm_resource_group.this]
 }
