@@ -15,7 +15,9 @@ resource "azurerm_resource_group" "this" {
 }
 
 module "vnet" {
-  source = "git::https://github.com/divyasingh0/az_tf_module.git//demo_folder/virtual_network?ref=e2eab019bf884c922b50fd17dfc5e7c5f3f3adf0"
+  source = "git::https://github.com/divyasingh0/az_tf_module.git//demo_folder/virtual_network?ref=d46b0d0d130a34d0034f232b4926a04e34696515"
+
+  # module variables
 
 
   vnets = {
@@ -60,7 +62,9 @@ subnets = {
 }
 
 module "storage_account" {
-  source = "git::https://github.com/divyasingh0/az_tf_module.git//demo_folder/storage?ref=e2eab019bf884c922b50fd17dfc5e7c5f3f3adf0"
+  source = "git::https://github.com/divyasingh0/az_tf_module.git//demo_folder/storage?ref=d46b0d0d130a34d0034f232b4926a04e34696515"
+
+  # module inputs here
 
   resource_name_config = {
     resource_type = "stg"
